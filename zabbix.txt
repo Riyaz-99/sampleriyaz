@@ -1,0 +1,47 @@
+import requests
+import json
+import csv
+from pyzabbix import ZabbixAPI
+
+# Zabbix API URL and authentication token
+ZABBIX_API_URL = "http://192.168.40.37"
+zabbix_user = 'riyaz'
+zabbix_password = 'Skylark@123$'
+
+zapi = ZabbixAPI(ZABBIX_API_URL)
+zapi.login(zabbix_user, zabbix_password)
+
+# Get CPU items
+cpu_items = zapi.item.get(filter={'key_': 'system.cpu.util[,idle]'}, output='extend')
+
+# Get host details for all hosts
+hosts = zapi.host.get(output='extend', selectInterfaces='extend')
+
+# List to store filtered data
+filtered_data = []
+
+# Iterate through each host
+for host in hosts:
+    host_name = host['host']
+    host_id = host['hostid']
+    interfaces = host.get('interfaces', [])  # Get interfaces list or empty list if not present
+    if interfaces:
+        ip_address = interfaces[0]['ip']  # Access first interface's IP if interfaces list is not empty
+    else:
+        ip_address = "N/A"  # Set IP address to N/A if no interfaces are available
+    
+    # Iterate through CPU items for the current host
+    for item in cpu_items:
+        # Get latest value for CPU item
+        history = zapi.history.get(itemids=item['itemid'], history=0, output='extend', limit=1, sortfield='clock', sortorder='DESC')
+        if history:
+            last_value = float(history[0]['value'])
+            if last_value > 90:
+                filtered_data.append([host_name, item['name'], item['key_'], last_value])  # Append filtered data
+
+# Export filtered data to CSV
+with open('filtered_data.csv', 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    writer.writerow(['Host', 'Item Name', 'Item Key', 'Last Value'])
+    writer.writerows(filtered_data)
+
